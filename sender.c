@@ -68,30 +68,56 @@ int main(int argc, char **argv)
     }
     freeaddrinfo(server_info);
 
-    // Main loop to send entire data buffer
-    int num_packets = G_BUF_LEN / chunk_size;
-    for (int p = 0; p < num_packets; ++p) {
+    // Establish signal handler for timer functions
+    struct sigaction sa;
+    if (establish_handler(&sa, SIGRTMIN, handler) == -1) {
+        fprintf(stderr, "[error]: couldn't establish handler\n");
+        exit(1);
+    }
+    sigset_t mask;
+    if (block_signal(SIGRTMIN, &mask) == -1) {
+        fprintf(stderr, "[error]: couldn't block signal\n");
+        exit(1);
+    }
 
-        // Send all packets in the range [base, window_size)
-        for (int i = base; i < window_size && i < num_packets; ++i) {
-            // Make packet
-            struct msg_t packet;
-            if (make_packet(&packet, i, chunk_size, (g_buffer + i * chunk_size)) == -1) {
-                fprintf(stderr, "couldn't make packet\n");
-                break;
-            }
+    // Variables controlling window size
+    char *bufstart = NULL;
+    int32_t window_start = 0;
+    int32_t window_end = window_size;
+    int32_t nextseqnum = 1;
 
-            // Serialize the packet into an array of bytes
-            size_t packet_len = sizeof(packet.type) + 2*sizeof(int) + packet.len;
-            uint8_t *packet_buf = malloc(packet_len * sizeof(uint8_t));
-            uint8_t *ptr = serialize_packet(packet_buf, &packet);
-            ssize_t send_len = sendto(sock, packet_buf, sizeof(packet_buf), 0, p->ai_addr, p->ai_addrlen);
-            if (send_len == -1) {
-                perror("sendto");
-                exit(1);
-            }
+    // Send all packets between window_start and window_end
+    for (int32_t i = window_start; i < window_end; ++i, ++nextseqnum) {
+        struct packet_t packet;
+        bufstart = g_buffer + i * chunk_size;
+        if (make_packet(&packet, i, chunk_size, bufstart) == -1) {
+            fprintf(stderr, "[sender]: couldn't make packet\n");
+            break;
         }
 
+        if (send_packet(&packet, sock, p) == -1) {
+            fprintf(stderr, "[sender]: couldn't send packet\n");
+            break;
+        }
+    }
+    
+    // Start timer for 3s
+    timer_t timerid;
+    if (create_timer(&timerid, SIGRTMIN) == -1) {
+        fprintf(stderr, "[sender]: couldn't create timer\n");
+        exit(1);
+    }
+    if (arm_timer(&timerid, 3) == -1) {
+        fprintf(stderr, "[sender]: couldn't arm timer\n");
+        exit(1);
+    }
 
+    // Main loop that processes recv's and new sends
+    while (bufstart < (g_buffer + G_BUF_LEN)) {
+        ack_t ack;
+        if (recv_ack(ack, sock, p) == -1) {
+            fprintf(stderr, "[error]: couldn't receive ACK\n");
+            exit(1);
+        }
     }
 }
