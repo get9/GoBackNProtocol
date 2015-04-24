@@ -1,15 +1,3 @@
-/*
- * Much of this code was derived from Beej's Guide to Network Programming (as
- * seen here: http://beej.us/guide/bgnet/output/html/multipage/index.html
- * 
- * It is a very useful guide for writing modern networking code in C on a UNIX-
- * style system.
- *
- * All code was written by myself. While it was heavily influence by the above
- * guide, I implemented everything here, looking up functions and their use as
- * I went in order to learn more about networking code in C.
- */
-
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
@@ -94,6 +82,48 @@ int create_socket(char *port, int max_conns, enum conn_type ct)
     }
     
     return sock;
+}
+
+// Gets the addr and port for a given server_ip and server_port
+int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, uint16_t server_port)
+{
+    if (*p == NULL) {
+        fprintf(stderr, "[get_addr_port]: *p was NULL\n");
+        return -1;
+    } else if (port == NULL) {
+        fprintf(stderr, "[get_addr_port]: port was NULL\n");
+        return -1;
+    }
+    // Networking code to set up address/socket
+    struct addrinfo hints;
+    struct addrinfo *server_info;
+    memset(&hints, 0, sizeof(hints));
+    hints.ai_family = AF_UNSPEC;
+    hints.ai_socktype = SOCK_DGRAM;
+    hints.ai_protocol = IPPROTO_UDP;
+
+    int err = getaddrinfo(serverip, server_port, &hints, &server_info);
+    if (err != 0) {
+        fprintf(stderr, "[error]: getaddrinfo: %s\n", gai_strerror(err));
+        return -1;
+    }
+
+    // Loop through to find socket to bind to
+    for (*p = server_info; *p != NULL; *p = *p->ai_next) {
+        if ((*sock = socket(*p->ai_family, *p->ai_socktype, *p->ai_protocol)) == -1) {
+            perror("sender: socket");
+            continue;
+        }
+        break;
+    }
+
+    // Did we bind to a socket?
+    if (*p == NULL) {
+        fprintf(stderr, "[error]: sender could not get socket\n");
+        return -1;
+    }
+    freeaddrinfo(server_info);
+    return 0;
 }
 
 // Handy function to get the correct struct for IPV4 or IPV6 calls

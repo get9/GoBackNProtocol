@@ -13,4 +13,5 @@ enum conn_type {
 };
 
 int create_socket(char *port, int num_conn, enum conn_type ct);
+int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, uint16_t server_port);
 void *get_addr_struct(struct sockaddr *client_addr);

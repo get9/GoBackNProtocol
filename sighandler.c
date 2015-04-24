@@ -2,11 +2,15 @@
 #include "sighandler.h"
 
 
+// Global variable indicates timeout status
+extern int g_timeout;
+
 // Signal handler for the timer
 void handler(int sig, siginfo_t *si, void *uc)
 {
     // XXX calling printf() from signal handler isn't async-safe
     printf("caught signal %d\n", sig);
+    g_timeout = true;
     signal(sig, SIG_IGN);
 }
 
