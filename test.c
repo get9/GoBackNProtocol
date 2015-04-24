@@ -1,11 +1,11 @@
 #include <signal.h>
-#include <sys/time.h>
+#include <time.h>
 #include <stdlib.h>
 #include <stdio.h>
 #include <unistd.h>
 
 
-typedef void (*handlerfunc_t)(int, siginfo_t, void *);
+typedef void (*handlerfunc_t)(int, siginfo_t *, void *);
 
 // Creates a timer that, when armed, responds to signal 'sig'
 int create_timer(timer_t *timerid, int sig)
@@ -15,7 +15,7 @@ int create_timer(timer_t *timerid, int sig)
     }
     struct sigevent sev;
     sev.sigev_notify = SIGEV_SIGNAL;
-    sev.sigev_sino = sig;
+    sev.sigev_signo = sig;
     sev.sigev_value.sival_ptr = timerid;
     if (timer_create(CLOCK_MONOTONIC, &sev, timerid) == -1) {
         perror("timer_create");
@@ -30,7 +30,7 @@ int arm_timer(timer_t *timerid, int sec)
     if (timerid == NULL) {
         return -1;
     }
-    struct itermspec its;
+    struct itimerspec its;
     its.it_value.tv_sec = sec;
     its.it_value.tv_nsec = 0;
     its.it_interval.tv_sec = its.it_value.tv_sec;
@@ -48,7 +48,7 @@ int disarm_timer(timer_t *timerid)
     if (timerid == NULL) {
         return -1;
     }
-    struct itermspec its;
+    struct itimerspec its;
     its.it_value.tv_sec = 0;
     its.it_value.tv_nsec = 0;
     if (timer_settime(*timerid, 0, &its, NULL) == -1) {
@@ -73,7 +73,7 @@ int establish_handler(struct sigaction *sa, int sig, handlerfunc_t handler)
         return -1;
     }
     sa->sa_flags = SA_SIGINFO;
-    sa->sa_sigaction = *handler;
+    sa->sa_sigaction = handler;
     sigemptyset(&sa->sa_mask);
     if (sigaction(sig, sa, NULL) == -1) {
         perror("sigaction");
@@ -83,11 +83,15 @@ int establish_handler(struct sigaction *sa, int sig, handlerfunc_t handler)
 }
 
 // Blocks signal 'sig'
-int block_signal(int sig, sigset_t mask)
+int block_signal(int sig, sigset_t *mask)
 {
-    sigemptyset(&mask);
-    sigaddset(&mask, sig);
-    if (sigprocmask(SIG_SETMASK, &mask, NULL) == -1) {
+    if (mask == NULL) {
+        fprintf(stderr, "mask is NULL\n");
+        return -1;
+    }
+    sigemptyset(mask);
+    sigaddset(mask, sig);
+    if (sigprocmask(SIG_SETMASK, mask, NULL) == -1) {
         perror("sigprocmask");
         return -1;
     }
@@ -95,9 +99,13 @@ int block_signal(int sig, sigset_t mask)
 }
 
 // Unblocks signal 'sig'
-int unblock_signal(int sig, sigset_t mask)
+int unblock_signal(int sig, sigset_t *mask)
 {
-    if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1) {
+    if (mask == NULL) {
+        fprintf(stderr, "mask is NULL\n");
+        return -1;
+    }
+    if (sigprocmask(SIG_UNBLOCK, mask, NULL) == -1) {
         perror("sigprocmask");
         return -1;
     }
@@ -135,7 +143,7 @@ int main ()
         exit(1);
     }
 
-    sleep(5);
+    sleep(3);
 
     if (unblock_signal(sig, &mask) == -1) {
         fprintf(stderr, "couldn't unblock signal\n");

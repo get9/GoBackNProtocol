@@ -10,7 +10,7 @@ int create_timer(timer_t *timerid, int sig)
     }
     struct sigevent sev;
     sev.sigev_notify = SIGEV_SIGNAL;
-    sev.sigev_sino = sig;
+    sev.sigev_signo = sig;
     sev.sigev_value.sival_ptr = timerid;
     if (timer_create(CLOCK_MONOTONIC, &sev, timerid) == -1) {
         perror("timer_create");
@@ -25,7 +25,7 @@ int arm_timer(timer_t *timerid, int sec)
     if (timerid == NULL) {
         return -1;
     }
-    struct itermspec its;
+    struct itimerspec its;
     its.it_value.tv_sec = sec;
     its.it_value.tv_nsec = 0;
     its.it_interval.tv_sec = its.it_value.tv_sec;
@@ -43,7 +43,7 @@ int disarm_timer(timer_t *timerid)
     if (timerid == NULL) {
         return -1;
     }
-    struct itermspec its;
+    struct itimerspec its;
     its.it_value.tv_sec = 0;
     its.it_value.tv_nsec = 0;
     if (timer_settime(*timerid, 0, &its, NULL) == -1) {

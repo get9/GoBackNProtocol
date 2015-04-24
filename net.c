@@ -87,36 +87,13 @@ int create_socket(char *port, int max_conns, enum conn_type ct)
     freeaddrinfo(llinfo);
 
     // Set socket to listen for new connections
-    if (listen(sock, max_conns) == -1) {
-        die("listen() failed");
+    if (ct == CONN_TYPE_TCP) {
+        if (listen(sock, max_conns) == -1) {
+            die("listen() failed");
+        }
     }
     
     return sock;
-}
-
-// Accepts connections from TCP socket
-int accept_tcp_connection(int server_socket)
-{
-    // Creates place to store client addr info and tries to accept the connection
-    struct sockaddr_storage client_addr;
-    unsigned int client_addr_len = sizeof(client_addr);
-    int client_socket = accept(server_socket, (struct sockaddr *) &client_addr,
-                               &client_addr_len);
-    if (client_socket == -1) {
-        die("accept() failed");
-    }
-
-    // Neat trick to get the correct sockaddr_in struct for IPV4/IPV6
-    void *addr_struct = get_addr_struct((struct sockaddr *) &client_addr);
-    if (addr_struct == NULL) {
-        die("get_addr_struct() failed");
-    }
-
-    // Print out connection information
-    char addr_str[INET6_ADDRSTRLEN];
-    inet_ntop(client_addr.ss_family, addr_struct, addr_str, sizeof(addr_str));
-    printf("got connection from: %s\n", addr_str);
-    return client_socket;
 }
 
 // Handy function to get the correct struct for IPV4 or IPV6 calls
