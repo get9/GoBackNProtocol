@@ -61,6 +61,7 @@ int main(int argc, char **argv)
     while (bufptr != NULL) {
         // If there was a timeout, resend the packets from base to nextseqnum - 1
         if (timedout) {
+            printf("in timeout\n");
             for (int i = base; i < nextseqnum; ++i) {
                 struct packet_t oldpkt = sentpkts[i % window_size];
                 if (send_packet(&oldpkt, sock, p) == -1) {
@@ -81,6 +82,7 @@ int main(int argc, char **argv)
         // Can send a new packet because there's room in the window. Make a new packet
         // and send it.
         else if (nextseqnum < base + window_size) {
+            printf("in send new\n");
             retransmissions = 0;
             // Size the packet. If this is the last packet, it could potentially be smaller
             size_t pktlen = chunk_size;

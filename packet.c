@@ -66,6 +66,7 @@ int send_ack(struct ack_t *ack, int sock, struct addrinfo *addr)
         perror("[send_ack]: sendto");
         return -1;
     }
+    printf("--------- SEND ACK %d\n", ack->ack_no);
     return 0;
 }
 
@@ -95,7 +96,7 @@ int send_packet(struct packet_t *packet, int sock, struct addrinfo *addr)
     return 0;
 }
 
-int recv_packet(struct packet_t *packet, int sock, struct addrinfo *addr)
+int recv_packet(struct packet_t *packet, int sock, struct sockaddr *addr)
 {
     if (packet == NULL) {
         fprintf(stderr, "[recv_packet]: packet was NULL\n");
@@ -107,7 +108,10 @@ int recv_packet(struct packet_t *packet, int sock, struct addrinfo *addr)
     // We know a packet cannot be larger than this
     size_t maxlen = 3 * sizeof(int) + MAXBUFSIZE;
     uint8_t buf[maxlen];
-    ssize_t recv_len = recvfrom(sock, buf, sizeof(buf), 0, addr->ai_addr, &addr->ai_addrlen);
+    socklen_t addrlen = (socklen_t) sizeof(*addr);
+    printf("right before recvfrom() [packet]\n");
+    ssize_t recv_len = recvfrom(sock, buf, maxlen, 0, addr, &addrlen);
+    printf("right after recvfrom() [packet]\n");
     if (recv_len == -1) {
         perror("[recv_packet]: recvfrom");
         return -1;
@@ -116,10 +120,11 @@ int recv_packet(struct packet_t *packet, int sock, struct addrinfo *addr)
         fprintf(stderr, "[recv_packet]: couldn't deserialize from network\n");
         return -1;
     }
+    printf("RECEIVED PACKET %d\n", packet->seq_no);
     return 0;
 }
 
-int recv_ack(struct ack_t *ack, int sock, struct addrinfo *addr)
+int recv_ack(struct ack_t *ack, int sock, struct sockaddr *addr)
 {
     if (ack == NULL) {
         fprintf(stderr, "[recv_ack]: packet was NULL\n");
@@ -129,9 +134,9 @@ int recv_ack(struct ack_t *ack, int sock, struct addrinfo *addr)
         return -1;
     }
     // We know a packet cannot be larger than this
-    size_t maxlen = 2 * sizeof(int);
+    socklen_t maxlen = (socklen_t) (2 * sizeof(int));
     uint8_t *buf = malloc(maxlen * sizeof(uint8_t));
-    ssize_t recv_len = recvfrom(sock, buf, sizeof(buf), 0, addr->ai_addr, &addr->ai_addrlen);
+    ssize_t recv_len = recvfrom(sock, buf, sizeof(buf), 0, addr, &maxlen);
     if (recv_len == -1) {
         perror("[recv_ack]: recvfrom");
         free(buf);

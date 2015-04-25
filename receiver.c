@@ -1,11 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <stdbool.h>
 #include <time.h>
+#include <limits.h>
+#include <netdb.h>
 
 #include "net.h"
 #include "timer.h"
 #include "data.h"
+#include "packet.h"
 
 
 int main(int argc, char **argv)
@@ -35,6 +39,7 @@ int main(int argc, char **argv)
     // Get a socket to connect to
     int sock;
     struct addrinfo *p;
+    struct sockaddr_storage their_addr;
     if (get_addr_sock(&p, &sock, NULL, port) == -1) {
         fprintf(stderr, "[error]: unable to get socket\n");
         exit(1);
@@ -49,10 +54,9 @@ int main(int argc, char **argv)
 
     // Main loop of execution - runs until we get an error or tear-down msg
     while (true) {
-        
         // Receive a packet
         struct packet_t pkt;
-        if (recv_packet(&pkt, sock, p) == -1) {
+        if (recv_packet(&pkt, sock, (struct sockaddr *)&their_addr) == -1) {
             fprintf(stderr, "[receiver]: couldn't receive packet\n");
             exit(1);
         }
@@ -88,7 +92,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "[receiver]: couldn't construct tear-down ACK\n");
         exit(1);
     }
-    if (send_ack(&tear_down_ack, port, p) == -1) {
+    if (send_ack(&tear_down_ack, sock, p) == -1) {
         fprintf(stderr, "[receiver]: couldn't send tear-down ACK\n");
         exit(1);
     }
@@ -103,7 +107,7 @@ int main(int argc, char **argv)
     int msec = (clock() - start) * 1000 / CLOCKS_PER_SEC;
     while (msec < 7000) {
         struct packet_t pkt;
-        if (recv_packet(&pkt, sock, p) == -1) {
+        if (recv_packet(&pkt, sock, (struct sockaddr *)&their_addr) == -1) {
             fprintf(stderr, "[receiver]: couldn't receive any packets after data\n");
             break;
         }
