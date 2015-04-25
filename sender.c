@@ -1,17 +1,15 @@
 #include <stdio.h>
 #include <stdlib.h>
 #include <string.h>
-#include <signal.h>
 #include <stdbool.h>
 #include <limits.h>
-#include "timer.h"
-#include "sighandler.h"
+#include <errno.h>
+#include <netdb.h>
 #include "data.h"
+#include "timer.h"
 #include "net.h"
 #include "packet.h"
 
-
-int g_timeout = false;
 
 int main(int argc, char **argv)
 {
@@ -46,32 +44,24 @@ int main(int argc, char **argv)
         exit(1);
     }
 
-    // Establish signal handler for timer functions
-    struct sigaction sa;
-    if (establish_handler(&sa, SIGRTMIN, handler) == -1) {
-        fprintf(stderr, "[error]: couldn't establish handler\n");
+    // Set initial timeout
+    if (set_timeout(sock, TIMEOUT_SEC) == -1) {
         exit(1);
     }
 
     // Variables controlling window size. bufptr is the pointer to the start
     // of where to pull data from g_buffer
-    char *bufptr = NULL;
+    char *bufptr = g_buffer;
     int32_t base = 0;
-    int32_t nextseqnum = 0;
+    int32_t nextseqnum = 1;
     int32_t retransmissions = 0;
+    int32_t timedout = false;
     struct packet_t *sentpkts = malloc(window_size * sizeof(struct packet_t));
-
-    // Create the timer to be used later on
-    timer_t timerid;
-    if (create_timer(&timerid, SIGRTMIN) == -1) {
-        fprintf(stderr, "[sender]: couldn't create timer\n");
-        exit(1);
-    }
 
     // Main loop for sender activity
     while (bufptr != NULL) {
         // If there was a timeout, resend the packets from base to nextseqnum - 1
-        if (g_timeout) {
+        if (timedout) {
             for (int i = base; i < nextseqnum; ++i) {
                 struct packet_t oldpkt = sentpkts[i % window_size];
                 if (send_packet(&oldpkt, sock, p) == -1) {
@@ -81,23 +71,17 @@ int main(int argc, char **argv)
             }
 
             // Reset state variables and record retransmissions
-            g_timeout = false;
+            timedout = false;
             retransmissions++;
             if (retransmissions > 10) {
                 fprintf(stderr, "[failure]: retried 10 times, could not send packets\n");
-                goto cleanup_and_exit;
-            }
-
-            // Start the timer
-            if (arm_timer(&timerid, 3) == -1) {
-                fprintf(stderr, "[sender]: couldnt' disarm timer\n");
                 goto cleanup_and_exit;
             }
         }
 
         // Can send a new packet because there's room in the window. Make a new packet
         // and send it.
-        if (nextseqnum < base + window_size) {
+        else if (nextseqnum < base + window_size) {
             retransmissions = 0;
             // Size the packet. If this is the last packet, it could potentially be smaller
             size_t pktlen = chunk_size;
@@ -127,8 +111,8 @@ int main(int argc, char **argv)
 
             // If our base is the same as nextseqnum, we need to arm the timer
             if (base == nextseqnum) {
-                if (arm_timer(&timerid, 3) == -1) {
-                    fprintf(stderr, "[sender]: couldn't arm timer\n");
+                if (set_timeout(sock, TIMEOUT_SEC) == -1) {
+                    fprintf(stderr, "[sender]: couldn't set timeout\n");
                     goto cleanup_and_exit;
                 }
             }
@@ -144,29 +128,18 @@ int main(int argc, char **argv)
             // If we've reached the nextseqnum, there are no outstanding packets
             // so disable timer
             if (base == nextseqnum) {
-                if (disarm_timer(&timerid) == -1) {
-                    fprintf(stderr, "[sender]: couldnt' disarm timer\n");
-                    goto cleanup_and_exit;
-                }
-            }
-            
-            // Otherwise there are still outstanding packets, so restart the timer
-            else {
-                if (arm_timer(&timerid, 3) == -1) {
-                    fprintf(stderr, "[sender]: couldnt' disarm timer\n");
+                if (disable_timeout(sock) == -1) {
                     goto cleanup_and_exit;
                 }
             }
         } else {
-            fprintf(stderr, "[sender]: couldn't receive ACK\n");
-            break;
+            if (errno == EAGAIN) {
+                timedout = true;
+            } else {
+                fprintf(stderr, "[sender]: couldn't receive ACK\n");
+                goto cleanup_and_exit;
+            }
         }
-    }
-
-    // Disable timer, just to make sure it's off
-    if (disarm_timer(&timerid) == -1) {
-        fprintf(stderr, "[sender]: couldn't disable timer\n");
-        goto cleanup_and_exit;
     }
 
     // After sending all packets and receiving all ACKs, construct tear-down
@@ -174,6 +147,12 @@ int main(int argc, char **argv)
     struct packet_t tear_down_pkt;
     if (make_packet(&tear_down_pkt, 4, 0, 0, bufptr) == -1) {
         fprintf(stderr, "[sender]: couldn't construct tear-down packet\n");
+        goto cleanup_and_exit;
+    }
+
+    // Set timeout on socket (just to make sure it's still set for the
+    // final transmissions)
+    if (set_timeout(sock, TIMEOUT_SEC) == -1) {
         goto cleanup_and_exit;
     }
     

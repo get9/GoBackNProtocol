@@ -7,16 +7,14 @@
 #include "packet.h"
 
 
-// Create a packet with data starting at 'buf'. buf or packet cannot
-// be NULL
-// If data 
+// Create a packet with data starting at 'buf'. buf or packet cannot be NULL
 int make_packet(struct packet_t *packet, int type, int seq_no, int len, char *buf)
 {
     if (packet == NULL) {
-        fprintf(stderr, "packet was NULL\n");
+        fprintf(stderr, "[make_packet]: packet was NULL\n");
         return -1;
     } else if (buf == NULL) {
-        fprintf(stderr, "buf was NULL\n");
+        fprintf(stderr, "[make_packet]: buf was NULL\n");
         return -1;
     }
 
@@ -25,7 +23,7 @@ int make_packet(struct packet_t *packet, int type, int seq_no, int len, char *bu
         packet->len = len;
         return 0;
     } else if (len > MAXBUFSIZE) {
-        fprintf(stderr, "packet data too large!\n");
+        fprintf(stderr, "[make_packet]: packet data too large!\n");
         return -1;
     } else {
         packet->type = 1;
@@ -65,7 +63,7 @@ int send_ack(struct ack_t *ack, int sock, struct addrinfo *addr)
     ptr = serialize_int(buf, ack->ack_no);
     ssize_t send_len = sendto(sock, buf, sizeof(buf), 0, addr->ai_addr, addr->ai_addrlen);
     if (send_len == -1) {
-        perror("sendto");
+        perror("[send_ack]: sendto");
         return -1;
     }
     return 0;
@@ -84,12 +82,12 @@ int send_packet(struct packet_t *packet, int sock, struct addrinfo *addr)
     size_t packet_len = 3 * sizeof(int) + packet->len;
     uint8_t *buf = malloc(packet_len * sizeof(uint8_t));
     if (serialize(buf, packet) == -1) {
-        fprintf(stderr, "[packet]: couldn't serialize packet\n");
+        fprintf(stderr, "[send_packet]: couldn't serialize packet\n");
         return -1;
     }
-    ssize_t send_len = sendto(sock, buf, sizeof(buf), 0, addr->ai_addr, addr->ai_addrlen);
+    ssize_t send_len = sendto(sock, buf, packet_len, 0, addr->ai_addr, addr->ai_addrlen);
     if (send_len == -1) {
-        perror("sendto");
+        perror("[send_packet]: sendto");
         return -1;
     }
     printf("SEND PACKET %d\n", packet->seq_no);
@@ -115,7 +113,7 @@ int recv_packet(struct packet_t *packet, int sock, struct addrinfo *addr)
         return -1;
     }
     if (deserialize(buf, packet) == -1) {
-        fprintf(stderr, "[deserialize]: couldn't deserialize from network\n");
+        fprintf(stderr, "[recv_packet]: couldn't deserialize from network\n");
         return -1;
     }
     return 0;

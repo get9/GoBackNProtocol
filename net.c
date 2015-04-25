@@ -98,6 +98,7 @@ int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, char *server_p
         fprintf(stderr, "[get_addr_port]: port was NULL\n");
         return -1;
     }
+
     // Networking code to set up address/socket
     struct addrinfo hints;
     struct addrinfo *server_info;
@@ -108,14 +109,14 @@ int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, char *server_p
 
     int err = getaddrinfo(serverip, server_port, &hints, &server_info);
     if (err != 0) {
-        fprintf(stderr, "[error]: getaddrinfo: %s\n", gai_strerror(err));
+        fprintf(stderr, "[get_addr_port]: getaddrinfo: %s\n", gai_strerror(err));
         return -1;
     }
 
     // Loop through to find socket to bind to
     for (*p = server_info; *p != NULL; *p = (*p)->ai_next) {
         if ((*sock = socket((*p)->ai_family, (*p)->ai_socktype, (*p)->ai_protocol)) == -1) {
-            perror("sender: socket");
+            perror("[get_addr_port]: sender: socket");
             continue;
         }
         break;
@@ -123,9 +124,10 @@ int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, char *server_p
 
     // Did we bind to a socket?
     if (*p == NULL) {
-        fprintf(stderr, "[error]: sender could not get socket\n");
+        fprintf(stderr, "[get_addr_port]: sender could not get socket\n");
         return -1;
     }
+
     freeaddrinfo(server_info);
     return 0;
 }

@@ -11,7 +11,6 @@ extern void handler(int sig, siginfo_t *si, void *uc)
     // XXX calling printf() from signal handler isn't async-safe
     printf("caught signal %d\n", sig);
     g_timeout = true;
-    signal(sig, SIG_IGN);
 }
 
 // Establishes the handler 'handler()' for 'sa'
