@@ -1,4 +1,7 @@
+#include <stdio.h>
+#include <stdbool.h>
 #include <signal.h>
+#include <stdlib.h>
 #include "sighandler.h"
 
 
@@ -25,7 +28,7 @@ int establish_handler(struct sigaction *sa, int sig, handlerfunc_t handler)
     sigemptyset(&sa->sa_mask);
     if (sigaction(sig, sa, NULL) == -1) {
         perror("sigaction");
-        exit(1);
+        return -1;
     }
     return 0;
 }
@@ -37,9 +40,9 @@ int block_signal(int sig, sigset_t *mask)
         fprintf(stderr, "mask is NULL\n");
         return -1;
     }
-    sigemptyset(&mask);
-    sigaddset(&mask, sig);
-    if (sigprocmask(SIG_SETMASK, &mask, NULL) == -1) {
+    sigemptyset(mask);
+    sigaddset(mask, sig);
+    if (sigprocmask(SIG_SETMASK, mask, NULL) == -1) {
         perror("sigprocmask");
         return -1;
     }
@@ -53,7 +56,7 @@ int unblock_signal(int sig, sigset_t *mask)
         fprintf(stderr, "mask is NULL\n");
         return -1;
     }
-    if (sigprocmask(SIG_UNBLOCK, &mask, NULL) == -1) {
+    if (sigprocmask(SIG_UNBLOCK, mask, NULL) == -1) {
         perror("sigprocmask");
         return -1;
     }

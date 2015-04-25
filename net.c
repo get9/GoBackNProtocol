@@ -8,7 +8,6 @@
 #include <stdlib.h>
 #include <fcntl.h>
 #include "net.h"
-#include "util.h"
 
 
 // Creates a socket and returns the socket descriptor
@@ -35,7 +34,8 @@ int create_socket(char *port, int max_conns, enum conn_type ct)
     };
     int status = getaddrinfo(NULL, port, &hints, &llinfo);
     if (status != 0) {
-        die("getaddrinfo() failed");
+        fprintf(stderr, "[create_socket]: getaddrinfo failed\n");
+        return -1;
     }
     
     // Create socket for incoming connections. Must loop through linked list
@@ -46,14 +46,16 @@ int create_socket(char *port, int max_conns, enum conn_type ct)
         // Connect to the socket
         sock = socket(s->ai_family, s->ai_socktype, s->ai_protocol);
         if (sock == -1) {
-            die("socket() failed");
+            fprintf(stderr, "[create_socket]: socket() failed\n");
+            return -1;
         }
 
         // Set the socket option that gets around "Address already in use"
         // errors
         int tru = 1;
         if (setsockopt(sock, SOL_SOCKET, SO_REUSEADDR, &tru, sizeof(int)) == -1) {
-            die("setsockopt() failed");
+            fprintf(stderr, "[create_socket]: setsockopt() failed\n");
+            return -1;
         }
 
         // Try to bind to this address; if it doesn't work, go to the next one
@@ -70,14 +72,16 @@ int create_socket(char *port, int max_conns, enum conn_type ct)
     // Check that we didn't iterate through the entire getaddrinfo linked list
     // and clean up getaddrinfo alloc
     if (s == NULL) {
-        die("server could not bind any address");
+        fprintf(stderr, "[create_socket]: server could not bind to any address\n");
+        return -1;
     }
     freeaddrinfo(llinfo);
 
     // Set socket to listen for new connections
     if (ct == CONN_TYPE_TCP) {
         if (listen(sock, max_conns) == -1) {
-            die("listen() failed");
+            fprintf(stderr, "[create_socket]: listen failed\n");
+            return -1;
         }
     }
     
@@ -85,12 +89,12 @@ int create_socket(char *port, int max_conns, enum conn_type ct)
 }
 
 // Gets the addr and port for a given server_ip and server_port
-int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, uint16_t server_port)
+int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, char *server_port)
 {
     if (*p == NULL) {
         fprintf(stderr, "[get_addr_port]: *p was NULL\n");
         return -1;
-    } else if (port == NULL) {
+    } else if (sock == NULL) {
         fprintf(stderr, "[get_addr_port]: port was NULL\n");
         return -1;
     }
@@ -109,8 +113,8 @@ int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, uint16_t serve
     }
 
     // Loop through to find socket to bind to
-    for (*p = server_info; *p != NULL; *p = *p->ai_next) {
-        if ((*sock = socket(*p->ai_family, *p->ai_socktype, *p->ai_protocol)) == -1) {
+    for (*p = server_info; *p != NULL; *p = (*p)->ai_next) {
+        if ((*sock = socket((*p)->ai_family, (*p)->ai_socktype, (*p)->ai_protocol)) == -1) {
             perror("sender: socket");
             continue;
         }
