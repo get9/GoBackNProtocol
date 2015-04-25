@@ -1,22 +1,30 @@
 CC = /usr/bin/cc
 CFLAGS = -c -Wall -Wpedantic -std=c11 -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE -D_POSIX_SOURCE
-LDFLAGS = -lrt
+LDFLAGS =
 RM = /bin/rm
-SEND_SOURCES = sender.c packet.c net.c timer.c
+SOURCES = packet.c net.c timer.c
+SEND_SOURCES = $(SOURCES) sender.c
+RECV_SOURCES = $(SOURCES) receiver.c
 SEND_OBJECTS = $(SEND_SOURCES:.c=.o)
-EXECUTABLE = sender
+RECV_OBJECTS = $(RECV_SOURCES:.c=.o)
+SEND_EXECUTABLE = sender
+RECV_EXECUTABLE = receiver
+EXECUTABLES = $(SEND_EXECUTABLE) $(RECV_EXECUTABLE)
 
-all: $(EXECUTABLE)
+all: $(EXECUTABLES)
 
 debug: CFLAGS += -g -DDEBUG
 
-debug: $(EXECUTABLE)
+debug: $(EXECUTABLES)
 
-$(EXECUTABLE): $(SEND_OBJECTS) 
+$(SEND_EXECUTABLE): $(SEND_OBJECTS) 
 	$(CC) $(LDFLAGS) $(SEND_OBJECTS) -o $@
+
+$(RECV_EXECUTABLE): $(RECV_OBJECTS) 
+	$(CC) $(LDFLAGS) $(RECV_OBJECTS) -o $@
 
 %.o: %.c %.h
 	$(CC) $(CFLAGS) $< -o $@
 
 clean:
-	$(RM) $(EXECUTABLE) $(SEND_OBJECTS)
+	$(RM) $(EXECUTABLE) $(SEND_OBJECTS) $(RECV_OBJECTS)

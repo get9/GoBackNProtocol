@@ -20,20 +20,19 @@ int main(int argc, char **argv)
         exit(1);
     }
     char *serverip = argv[1];
-    char *tmp;
-    long int x = strtol(argv[2], &tmp, 10);
+    long int x = strtol(argv[2], NULL, 10);
     if (x < 0 || x > USHRT_MAX) {
-        fprintf(stderr, "[error]: port %ld is invalid", x);
+        fprintf(stderr, "[error]: port %ld is invalid\n", x);
         exit(1);
     }
     char *server_port = argv[3];
-    long int c = strtol(argv[3], &tmp, 10);
+    long int c = strtol(argv[3], NULL, 10);
     if (c < 1 || c > MAXBUFSIZE) {
         fprintf(stderr, "[error]: chunk_size should be between 1 and MAXBUFSIZE\n");
         exit(1);
     }
     int32_t chunk_size = (int32_t) c;
-    long int w = strtol(argv[4], &tmp, 10);
+    long int w = strtol(argv[4], NULL, 10);
     int32_t window_size = (int32_t) w;
 
     // Get network information
