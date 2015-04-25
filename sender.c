@@ -11,7 +11,7 @@
 #include "packet.h"
 
 
-extern int g_timeout;
+int g_timeout = false;
 
 int main(int argc, char **argv)
 {
