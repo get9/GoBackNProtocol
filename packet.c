@@ -82,12 +82,16 @@ int send_packet(struct packet_t *packet, int sock, struct addrinfo *addr)
     }
     size_t packet_len = 3 * sizeof(int) + packet->len;
     uint8_t *buf = malloc(packet_len * sizeof(uint8_t));
-    if (serialize(buf, packet) == -1) {
+    serialize(buf, packet);
+    if (buf == NULL) {
         fprintf(stderr, "[send_packet]: couldn't serialize packet\n");
+        free(buf);
         return -1;
     }
+    printf("buf = %s\n", buf);
     ssize_t send_len = sendto(sock, buf, packet_len, 0, addr->ai_addr, addr->ai_addrlen);
     if (send_len == -1) {
+        free(buf);
         perror("[send_packet]: sendto");
         return -1;
     }
@@ -107,20 +111,26 @@ int recv_packet(struct packet_t *packet, int sock, struct sockaddr *addr)
     }
     // We know a packet cannot be larger than this
     size_t maxlen = 3 * sizeof(int) + MAXBUFSIZE;
-    uint8_t buf[maxlen];
+    uint8_t *buf = malloc(maxlen * sizeof(uint8_t));
     socklen_t addrlen = (socklen_t) sizeof(*addr);
     printf("right before recvfrom() [packet]\n");
+    printf("sock    = %d\n", sock);
+    printf("buf     = %x\n", buf);
+    printf("maxlen  = %d\n", maxlen);
+    printf("addrlen = %d\n", addrlen);
     ssize_t recv_len = recvfrom(sock, buf, maxlen, 0, addr, &addrlen);
     printf("right after recvfrom() [packet]\n");
     if (recv_len == -1) {
         perror("[recv_packet]: recvfrom");
         return -1;
     }
-    if (deserialize(buf, packet) == -1) {
+    buf = deserialize(buf, packet);
+    if (buf == NULL) {
         fprintf(stderr, "[recv_packet]: couldn't deserialize from network\n");
         return -1;
     }
     printf("RECEIVED PACKET %d\n", packet->seq_no);
+    free(buf);
     return 0;
 }
 
@@ -150,20 +160,20 @@ int recv_ack(struct ack_t *ack, int sock, struct sockaddr *addr)
 }
 
 // Serialize packet into a single buffer of bytes. Assumes the serialbuf is long enough
-int serialize(uint8_t *serialbuf, struct packet_t *packet)
+uint8_t *serialize(uint8_t *serialbuf, struct packet_t *packet)
 {
     if (packet == NULL) {
         fprintf(stderr, "[serialize]: packet was NULL\n");
-        return -1;
+        return NULL;
     } else if (serialbuf == NULL) {
         fprintf(stderr, "[serialize]: serialbuf was NULL\n");
-        return -1;
+        return NULL;
     }
     serialbuf = serialize_int(serialbuf, packet->type);
     serialbuf = serialize_int(serialbuf, packet->seq_no);
     serialbuf = serialize_int(serialbuf, packet->len);
     strncpy((char *)serialbuf, packet->data, packet->len);
-    return 0;
+    return serialbuf + packet->len;
 }
 
 // Serialize an int into network-byte order. Increases buffer pointer to next
@@ -178,20 +188,20 @@ uint8_t *serialize_int(uint8_t *serialbuf, int val)
 }
 
 // Deserializes a packet from the network.
-int deserialize(uint8_t *serialbuf, struct packet_t *packet)
+uint8_t *deserialize(uint8_t *serialbuf, struct packet_t *packet)
 {
     if (packet == NULL) {
         fprintf(stderr, "[deserialize]: packet was NULL\n");
-        return -1;
+        return NULL;
     } else if (serialbuf == NULL) {
         fprintf(stderr, "[deserialize]: serialbuf was NULL\n");
-        return -1;
+        return NULL;
     }
     serialbuf = deserialize_int(serialbuf, &packet->type);
     serialbuf = deserialize_int(serialbuf, &packet->seq_no);
     serialbuf = deserialize_int(serialbuf, &packet->len);
     strncpy(packet->data, (char *)serialbuf, packet->len);
-    return 0;
+    return serialbuf;
 }
 
 // Deserializes an integer from the network. Assumes both pointers are not NULL

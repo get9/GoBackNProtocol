@@ -36,6 +36,7 @@ int main(int argc, char **argv)
     int32_t window_size = (int32_t) w;
 
     // Get network information
+    struct sockaddr theiraddr;
     struct addrinfo *p;
     int sock;
     if (get_addr_sock(&p, &sock, serverip, server_port) == -1) {
@@ -52,7 +53,7 @@ int main(int argc, char **argv)
     // of where to pull data from g_buffer
     char *bufptr = g_buffer;
     int32_t base = 0;
-    int32_t nextseqnum = 1;
+    int32_t nextseqnum = 0;
     int32_t retransmissions = 0;
     int32_t timedout = false;
     struct packet_t *sentpkts = malloc(window_size * sizeof(struct packet_t));
@@ -123,7 +124,7 @@ int main(int argc, char **argv)
         // Receive an ACK and check if we can stop the timer. Update base and
         // nextseqnum accordingly
         struct ack_t ack;
-        if (recv_ack(&ack, sock, p) != -1) {
+        if (recv_ack(&ack, sock, &theiraddr) != -1) {
             base = ack.ack_no + 1;
 
             // If we've reached the nextseqnum, there are no outstanding packets
@@ -164,7 +165,7 @@ int main(int argc, char **argv)
             goto cleanup_and_exit;
         }
         struct ack_t tear_down_ack;
-        if (recv_ack(&tear_down_ack, sock, p) == -1) {
+        if (recv_ack(&tear_down_ack, sock, &theiraddr) == -1) {
             fprintf(stderr, "[sender]: couldn't receive tear-down ack\n");
             goto cleanup_and_exit;
         }

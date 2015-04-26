@@ -28,6 +28,6 @@ int send_packet(struct packet_t *packet, int sock, struct addrinfo *addr);
 int recv_packet(struct packet_t *packet, int sock, struct sockaddr *addr);
 int recv_ack(struct ack_t *ack, int sock, struct sockaddr *addr);
 uint8_t *serialize_int(uint8_t *serialbuf, int val);
-int serialize(uint8_t *serialbuf, struct packet_t *packet);
-int deserialize(uint8_t *serialbuf, struct packet_t *packet);
+uint8_t *serialize(uint8_t *serialbuf, struct packet_t *packet);
+uint8_t *deserialize(uint8_t *serialbuf, struct packet_t *packet);
 uint8_t *deserialize_int(uint8_t *serialbuf, int *val);

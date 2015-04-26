@@ -27,9 +27,9 @@ int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, char *server_p
     memset(&hints, 0, sizeof(hints));
     hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
-    //hints.ai_protocol = IPPROTO_UDP;
+    hints.ai_protocol = IPPROTO_UDP;
     if (serverip == NULL) {
-        hints.ai_flags = AI_PASSIVE;
+        hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
     }
 
     int err = getaddrinfo(serverip, server_port, &hints, &server_info);
