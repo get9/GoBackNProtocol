@@ -25,7 +25,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "[error]: port %ld is invalid\n", x);
         exit(1);
     }
-    char *server_port = argv[3];
+    char *server_port = argv[2];
     long int c = strtol(argv[3], NULL, 10);
     if (c < 1 || c > MAXBUFSIZE) {
         fprintf(stderr, "[error]: chunk_size should be between 1 and MAXBUFSIZE\n");
@@ -34,6 +34,11 @@ int main(int argc, char **argv)
     int32_t chunk_size = (int32_t) c;
     long int w = strtol(argv[4], NULL, 10);
     int32_t window_size = (int32_t) w;
+
+    printf("server_IP   = %s\n", serverip);
+    printf("server_port = %s\n", server_port);
+    printf("chunk_size  = %d\n", chunk_size);
+    printf("window_size = %d\n", window_size);
 
     // Get network information
     struct sockaddr theiraddr;

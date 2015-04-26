@@ -22,6 +22,7 @@ int main(int argc, char **argv)
 
     // Parse/validate args
     char *port = argv[1];
+    printf("port = %s\n", port);
     long int x = strtol(argv[1], NULL, 10);
     if (x < 0 || x > USHRT_MAX) {
         fprintf(stderr, "[error]: port %ld is invalid\n", x);
@@ -45,6 +46,9 @@ int main(int argc, char **argv)
         exit(1);
     }
 
+    // Len of connecting address
+    size_t their_addr_len;
+
     // Last packet received
     int packet_received = -1;
 
@@ -56,10 +60,11 @@ int main(int argc, char **argv)
     while (true) {
         // Receive a packet
         struct packet_t pkt;
-        if (recv_packet(&pkt, sock, (struct sockaddr *)&their_addr) == -1) {
+        if (recv_packet(&pkt, sock, (struct sockaddr *)&their_addr, &their_addr_len) == -1) {
             fprintf(stderr, "[receiver]: couldn't receive packet\n");
             exit(1);
         }
+        print_packet(pkt);
 
         // Check if this is the tear-down message. If so, get out of loop.
         if (pkt.type == 4) {
@@ -80,7 +85,8 @@ int main(int argc, char **argv)
             fprintf(stderr, "[receiver]: couldn't construct ACK\n");
             exit(1);
         }
-        if (send_ack(&ack, sock, p) == -1) {
+        print_ack(ack);
+        if (send_ack(&ack, sock, (struct addrinfo *)&their_addr, their_addr_len) == -1) {
             fprintf(stderr, "[receiver]: couldn't send ACK %d\n", ack.ack_no);
             exit(1);
         }
@@ -92,7 +98,7 @@ int main(int argc, char **argv)
         fprintf(stderr, "[receiver]: couldn't construct tear-down ACK\n");
         exit(1);
     }
-    if (send_ack(&tear_down_ack, sock, p) == -1) {
+    if (send_ack(&tear_down_ack, sock, (struct addrinfo *)&their_addr, their_addr_len) == -1) {
         fprintf(stderr, "[receiver]: couldn't send tear-down ACK\n");
         exit(1);
     }
@@ -107,14 +113,14 @@ int main(int argc, char **argv)
     int msec = (clock() - start) * 1000 / CLOCKS_PER_SEC;
     while (msec < 7000) {
         struct packet_t pkt;
-        if (recv_packet(&pkt, sock, (struct sockaddr *)&their_addr) == -1) {
+        if (recv_packet(&pkt, sock, (struct sockaddr *)&their_addr, &their_addr_len) == -1) {
             fprintf(stderr, "[receiver]: couldn't receive any packets after data\n");
             break;
         }
         
         // Only ACK if it's a tear-down packet
         if (pkt.type == 4) {
-            if (send_ack(&tear_down_ack, sock, p) == -1) {
+            if (send_ack(&tear_down_ack, sock, (struct addrinfo *)&their_addr, their_addr_len) == -1) {
                 fprintf(stderr, "[receiver]: couldn't send tear-down ACK\n");
                 break;
             }

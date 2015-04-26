@@ -25,11 +25,10 @@ int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, char *server_p
     struct addrinfo hints;
     struct addrinfo *server_info;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_INET;
+    hints.ai_family = AF_UNSPEC;
     hints.ai_socktype = SOCK_DGRAM;
-    hints.ai_protocol = IPPROTO_UDP;
     if (serverip == NULL) {
-        hints.ai_flags = AI_PASSIVE | AI_ADDRCONFIG;
+        hints.ai_flags = AI_PASSIVE;
     }
 
     int err = getaddrinfo(serverip, server_port, &hints, &server_info);
