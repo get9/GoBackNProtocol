@@ -1,5 +1,5 @@
 CC = /usr/bin/cc
-CFLAGS = -c -Wall -Wpedantic -std=c11 -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE -D_POSIX_SOURCE
+CFLAGS = -c -Wall -Wpedantic -Wno-overlength-strings -std=c11 -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE -D_POSIX_SOURCE
 LDFLAGS = -lm
 RM = /bin/rm
 SOURCES = packet.c net.c timer.c
@@ -18,10 +18,10 @@ debug: CFLAGS += -g -DDEBUG
 debug: $(EXECUTABLES)
 
 $(SEND_EXECUTABLE): $(SEND_OBJECTS) 
-	$(CC) $(LDFLAGS) $(SEND_OBJECTS) -o $@
+	$(CC) $(SEND_OBJECTS) -o $@ $(LDFLAGS)
 
 $(RECV_EXECUTABLE): $(RECV_OBJECTS) 
-	$(CC) $(LDFLAGS) $(RECV_OBJECTS) -o $@
+	$(CC) $(RECV_OBJECTS) -o $@ $(LDFLAGS)
 
 %.o: %.c %.h
 	$(CC) $(CFLAGS) $< -o $@
