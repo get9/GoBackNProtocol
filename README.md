@@ -6,8 +6,8 @@ Sean Karlage
 1. unzip /path/to/zipfile.zip
 2. cd /path/to/unzipped/file
 3. make
-4. (in terminal 1): ./receiver <port> [<loss_rate>]
-5. (in terminal 2): ./sender <ip> <port> <chunk_size> <window_size>
+4. (in terminal 1): ./receiver &lt;port&gt; [&lt;loss_rate&gt;]
+5. (in terminal 2): ./sender &lt;ip&gt; &lt;port&gt; &lt;chunk_size&gt; &lt;window_size&gt;
 
 ## General Architecture
 There are multiple files that comprise this project:
