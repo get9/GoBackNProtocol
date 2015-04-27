@@ -11,10 +11,10 @@
 
 
 // Gets the addr and port for a given server_ip and server_port
-int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, char *server_port)
+int get_addr_sock(struct sockaddr *addr, int *sock, char *serverip, char *server_port)
 {
-    if (*p == NULL) {
-        fprintf(stderr, "[get_addr_port]: *p was NULL\n");
+    if (addr == NULL) {
+        fprintf(stderr, "[get_addr_port]: addr was NULL\n");
         return -1;
     } else if (sock == NULL) {
         fprintf(stderr, "[get_addr_port]: port was NULL\n");
@@ -25,7 +25,7 @@ int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, char *server_p
     struct addrinfo hints;
     struct addrinfo *server_info;
     memset(&hints, 0, sizeof(hints));
-    hints.ai_family = AF_UNSPEC;
+    hints.ai_family = AF_INET;
     hints.ai_socktype = SOCK_DGRAM;
     if (serverip == NULL) {
         hints.ai_flags = AI_PASSIVE;
@@ -38,15 +38,16 @@ int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, char *server_p
     }
 
     // Loop through to find socket to bind to
-    for (*p = server_info; *p != NULL; *p = (*p)->ai_next) {
-        if ((*sock = socket((*p)->ai_family, (*p)->ai_socktype, (*p)->ai_protocol)) == -1) {
+    struct addrinfo *p;
+    for (p = server_info; p != NULL; p = p->ai_next) {
+        if ((*sock = socket(p->ai_family, p->ai_socktype, p->ai_protocol)) == -1) {
             perror("[get_addr_port]: sender: socket");
             continue;
         }
 
         // Bind to socket, but only if it's server that's calling
         if (serverip == NULL) {
-            if (bind(*sock, (*p)->ai_addr, (*p)->ai_addrlen) == -1) {
+            if (bind(*sock, p->ai_addr, p->ai_addrlen) == -1) {
                 close(*sock);
                 perror("[get_addr_port]: bind");
                 continue;
@@ -56,10 +57,12 @@ int get_addr_sock(struct addrinfo **p, int *sock, char *serverip, char *server_p
     }
 
     // Did we bind to a socket?
-    if (*p == NULL) {
+    if (p == NULL) {
         fprintf(stderr, "[get_addr_port]: sender could not get socket\n");
         return -1;
     }
+    
+    *addr = *(p->ai_addr);
 
     freeaddrinfo(server_info);
     return 0;

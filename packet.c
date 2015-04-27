@@ -4,8 +4,16 @@
 #include <sys/types.h>
 #include <sys/socket.h>
 #include <netdb.h>
+#include <errno.h>
+#include <stdbool.h>
 #include "packet.h"
 
+
+bool is_lost(double loss_rate)
+{
+    double rv = drand48();
+    return (rv < loss_rate);
+}
 
 // Prints packet information
 void print_packet(struct packet_t pkt)
@@ -15,7 +23,7 @@ void print_packet(struct packet_t pkt)
     printf("len    = %d\n", pkt.len);
     printf("data   = ");
     for (int i = 0; i < pkt.len; ++i) {
-        printf("%0x ", pkt.data[i]);
+        printf("%c", pkt.data[i]);
     }
     printf("\n");
 }
@@ -33,14 +41,12 @@ int make_packet(struct packet_t *packet, int type, int seq_no, int len, char *bu
     if (packet == NULL) {
         fprintf(stderr, "[make_packet]: packet was NULL\n");
         return -1;
-    } else if (buf == NULL) {
-        fprintf(stderr, "[make_packet]: buf was NULL\n");
-        return -1;
     }
 
     if (len == 0) {
         packet->type = 4;
         packet->len = len;
+        packet->seq_no = -1;
         return 0;
     } else if (len > MAXBUFSIZE) {
         fprintf(stderr, "[make_packet]: packet data too large!\n");
@@ -49,8 +55,9 @@ int make_packet(struct packet_t *packet, int type, int seq_no, int len, char *bu
         packet->type = 1;
         packet->seq_no = seq_no;
         packet->len = len;
-        // XXX This shouldn't copy any null byte over...
-        strncpy(packet->data, buf, len);
+        for (int i = 0; i < len; ++i) {
+            packet->data[i] = buf[i];
+        }
     }
     return 0;
 }
@@ -68,7 +75,7 @@ int make_ack(struct ack_t *ack, int type, int ack_no)
 }
 
 // Sends ACK packet
-int send_ack(struct ack_t *ack, int sock, struct addrinfo *addr, size_t addrlen)
+int send_ack(struct ack_t *ack, int sock, struct sockaddr *addr)
 {
     if (ack == NULL) {
         fprintf(stderr, "[send_ack]: ack was NULL\n");
@@ -82,17 +89,16 @@ int send_ack(struct ack_t *ack, int sock, struct addrinfo *addr, size_t addrlen)
     uint8_t *ptr = buf;
     ptr = serialize_int(ptr, ack->type);
     ptr = serialize_int(ptr, ack->ack_no);
-    ssize_t send_len = sendto(sock, buf, buflen, 0, addr->ai_addr, addrlen);
+    ssize_t send_len = sendto(sock, buf, buflen, 0, addr, sizeof(*addr));
     if (send_len == -1) {
         perror("[send_ack]: sendto");
         return -1;
     }
-    printf("--------- SEND ACK %d\n", ack->ack_no);
     return 0;
 }
 
 // Send the packet by first serializing it and then sending it over the network
-int send_packet(struct packet_t *packet, int sock, struct addrinfo *addr)
+int send_packet(struct packet_t *packet, int sock, struct sockaddr *addr)
 {
     if (packet == NULL) {
         fprintf(stderr, "[send_packet]: packet was NULL\n");
@@ -113,19 +119,18 @@ int send_packet(struct packet_t *packet, int sock, struct addrinfo *addr)
         free(buf);
         return -1;
     }
-    printf("buf = %s\n", buf);
-    ssize_t send_len = sendto(sock, buf, packet_len, 0, addr->ai_addr, addr->ai_addrlen);
+    size_t addrlen = sizeof(*addr);
+    ssize_t send_len = sendto(sock, buf, packet_len, 0, addr, addrlen);
     if (send_len == -1) {
         free(buf);
         perror("[send_packet]: sendto");
         return -1;
     }
-    printf("SEND PACKET %d\n", packet->seq_no);
     free(buf);
     return 0;
 }
 
-int recv_packet(struct packet_t *packet, int sock, struct sockaddr *addr, size_t *addrlen)
+int recv_packet(struct packet_t *packet, int sock, struct sockaddr *addr, socklen_t *addrlen, double loss_rate)
 {
     if (packet == NULL) {
         fprintf(stderr, "[recv_packet]: packet was NULL\n");
@@ -133,13 +138,23 @@ int recv_packet(struct packet_t *packet, int sock, struct sockaddr *addr, size_t
     } else if (addr == NULL) {
         fprintf(stderr, "[recv_packet]: addr was NULL\n");
         return -1;
+    } else if (addrlen == NULL) {
+        fprintf(stderr, "[recv_packet]: addrlen was NULL\n");
+        return -1;
     }
     // We know a packet cannot be larger than this
     size_t maxlen = 3 * sizeof(int) + MAXBUFSIZE;
     uint8_t *buf = malloc(maxlen * sizeof(uint8_t));
+    
+    // Loop until we can actually receive something (due to loss_rate)
+    while (is_lost(loss_rate)) {
+        ssize_t recv_len = recvfrom(sock, buf, maxlen, 0, addr, addrlen);
+        if (recv_len == -1) {
+            return -1;
+        }
+    }
     ssize_t recv_len = recvfrom(sock, buf, maxlen, 0, addr, addrlen);
     if (recv_len == -1) {
-        perror("[recv_packet]: recvfrom");
         return -1;
     }
     if (deserialize(buf, packet) == -1) {
@@ -147,7 +162,6 @@ int recv_packet(struct packet_t *packet, int sock, struct sockaddr *addr, size_t
         free(buf);
         return -1;
     }
-    printf("RECEIVED PACKET %d\n", packet->seq_no);
     free(buf);
     return 0;
 }
@@ -162,18 +176,18 @@ int recv_ack(struct ack_t *ack, int sock, struct sockaddr *addr)
         return -1;
     }
     // We know a packet cannot be larger than this
-    socklen_t maxlen = (socklen_t) (2 * sizeof(int));
+    size_t maxlen = (socklen_t) (2 * sizeof(int));
     uint8_t *buf = malloc(maxlen * sizeof(uint8_t));
-    ssize_t recv_len = recvfrom(sock, buf, sizeof(buf), 0, addr, &maxlen);
+    socklen_t addrlen = sizeof(*addr);
+    ssize_t recv_len = recvfrom(sock, buf, maxlen, 0, addr, &addrlen);
     if (recv_len == -1) {
-        perror("[recv_ack]: recvfrom");
         free(buf);
         return -1;
     }
-    buf = deserialize_int(buf, &ack->type);
-    buf = deserialize_int(buf, &ack->ack_no);
+    uint8_t *tmp = buf;
+    tmp = deserialize_int(tmp, &ack->type);
+    tmp = deserialize_int(tmp, &ack->ack_no);
     free(buf);
-    printf("-------- RECEIVE ACK %d\n", ack->ack_no);
     return 0;
 }
 
@@ -220,7 +234,7 @@ int deserialize(uint8_t *serialbuf, struct packet_t *packet)
     tmp = deserialize_int(tmp, &packet->type);
     tmp = deserialize_int(tmp, &packet->seq_no);
     tmp = deserialize_int(tmp, &packet->len);
-    strncpy(packet->data, (char *)tmp, packet->len);
+    strcpy(packet->data, (char *)tmp);
     return 0;
 }
 

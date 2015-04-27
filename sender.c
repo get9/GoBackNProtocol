@@ -4,6 +4,7 @@
 #include <stdbool.h>
 #include <limits.h>
 #include <errno.h>
+#include <math.h>
 #include <netdb.h>
 #include "data.h"
 #include "timer.h"
@@ -41,10 +42,9 @@ int main(int argc, char **argv)
     printf("window_size = %d\n", window_size);
 
     // Get network information
-    struct sockaddr theiraddr;
-    struct addrinfo *p;
+    struct sockaddr addr;
     int sock;
-    if (get_addr_sock(&p, &sock, serverip, server_port) == -1) {
+    if (get_addr_sock(&addr, &sock, serverip, server_port) == -1) {
         fprintf(stderr, "[sender]: couldn't get socket or addrinfo\n");
         exit(1);
     }
@@ -59,21 +59,46 @@ int main(int argc, char **argv)
     char *bufptr = g_buffer;
     int32_t base = 0;
     int32_t nextseqnum = 0;
+    int32_t num_packets = (int32_t) ceil((strlen(g_buffer) + 1) / chunk_size);
+    int32_t last_ack = 0;
     int32_t retransmissions = 0;
     int32_t timedout = false;
     struct packet_t *sentpkts = malloc(window_size * sizeof(struct packet_t));
 
+    // Send out window_size packets initially
+    for (int i = 0; i < window_size; ++i) {
+        // Make a new packet
+        int init_pktlen = chunk_size;
+        struct packet_t pkt;
+        int ret = make_packet(&pkt, 1, nextseqnum, init_pktlen, bufptr);
+        if (ret == -1) {
+            fprintf(stderr, "[sender]: couldn't make packet %d\n", nextseqnum);
+            goto cleanup_and_exit;
+        }
+
+        // If succesfully sent, cache the packet in the array of packets which
+        // represents our window.
+        if (send_packet(&pkt, sock, &addr) == -1) {
+            fprintf(stderr, "[sender]: couldn't send packet %d\n", nextseqnum);
+            goto cleanup_and_exit;
+        }
+        printf("SEND PACKET %d\n", pkt.seq_no);
+        sentpkts[nextseqnum % window_size] = pkt;
+        nextseqnum++;
+        bufptr += chunk_size;
+    }
+
     // Main loop for sender activity
-    while (bufptr != NULL) {
+    while (*bufptr != '\0') {
         // If there was a timeout, resend the packets from base to nextseqnum - 1
         if (timedout) {
-            printf("in timeout\n");
             for (int i = base; i < nextseqnum; ++i) {
                 struct packet_t oldpkt = sentpkts[i % window_size];
-                if (send_packet(&oldpkt, sock, p) == -1) {
+                if (send_packet(&oldpkt, sock, &addr) == -1) {
                     fprintf(stderr, "[sender]: failed to resend packet %d\n", oldpkt.seq_no);
                     break;
                 }
+                printf("SEND PACKET %d\n", oldpkt.seq_no);
             }
 
             // Reset state variables and record retransmissions
@@ -88,7 +113,6 @@ int main(int argc, char **argv)
         // Can send a new packet because there's room in the window. Make a new packet
         // and send it.
         else if (nextseqnum < base + window_size) {
-            printf("in send new\n");
             retransmissions = 0;
             // Size the packet. If this is the last packet, it could potentially be smaller
             size_t pktlen = chunk_size;
@@ -106,15 +130,15 @@ int main(int argc, char **argv)
 
             // If succesfully sent, cache the packet in the array of packets which
             // represents our window.
-            if (send_packet(&pkt, sock, p) != -1) {
-                memcpy(&sentpkts[nextseqnum % window_size], &pkt, sizeof(pkt));
-            } else {
+            if (send_packet(&pkt, sock, &addr) == -1) {
                 fprintf(stderr, "[sender]: couldn't send packet %d\n", nextseqnum);
                 break;
             }
+            printf("SEND PACKET %d\n", pkt.seq_no);
+            sentpkts[nextseqnum % window_size] = pkt;
 
             // Increment bufptr so that it points to the start of the next data to send
-            bufptr += chunk_size;
+            bufptr += pktlen;
 
             // If our base is the same as nextseqnum, we need to arm the timer
             if (base == nextseqnum) {
@@ -129,8 +153,9 @@ int main(int argc, char **argv)
         // Receive an ACK and check if we can stop the timer. Update base and
         // nextseqnum accordingly
         struct ack_t ack;
-        if (recv_ack(&ack, sock, &theiraddr) != -1) {
+        if (recv_ack(&ack, sock, &addr) != -1) {
             base = ack.ack_no + 1;
+            last_ack = ack.ack_no;
 
             // If we've reached the nextseqnum, there are no outstanding packets
             // so disable timer
@@ -139,6 +164,7 @@ int main(int argc, char **argv)
                     goto cleanup_and_exit;
                 }
             }
+            printf("--------RECEIVED ACK %d\n", ack.ack_no + 1);
         } else {
             if (errno == EAGAIN) {
                 timedout = true;
@@ -149,10 +175,22 @@ int main(int argc, char **argv)
         }
     }
 
+    // Need to wait to see if we got all ACKs
+    while (last_ack < num_packets) {
+        struct ack_t ack;
+        if (recv_ack(&ack, sock, &addr) == -1) {
+            fprintf(stderr, "[sender]: couldn't receive remaining ACKs\n");
+            goto cleanup_and_exit;
+        }
+        printf("--------RECEIVED ACK %d\n\n", ack.ack_no);
+        last_ack = ack.ack_no;
+    }
+
     // After sending all packets and receiving all ACKs, construct tear-down
     // message (type=8 and len=0)
     struct packet_t tear_down_pkt;
-    if (make_packet(&tear_down_pkt, 4, 0, 0, bufptr) == -1) {
+    printf("Sending tear-down packet\n");
+    if (make_packet(&tear_down_pkt, 4, 0, 0, NULL) == -1) {
         fprintf(stderr, "[sender]: couldn't construct tear-down packet\n");
         goto cleanup_and_exit;
     }
@@ -165,15 +203,17 @@ int main(int argc, char **argv)
     
     // Retransmit this packet 10 times, unless it gets an ACK of type=8
     for (int i = 0; i < 10; ++i) {
-        if (send_packet(&tear_down_pkt, sock, p) == -1) {
+        if (send_packet(&tear_down_pkt, sock, &addr) == -1) {
             fprintf(stderr, "[sender]: couldn't send tear-down packet\n");
             goto cleanup_and_exit;
         }
+        printf("SEND TEAR-DOWN PACKET\n");
         struct ack_t tear_down_ack;
-        if (recv_ack(&tear_down_ack, sock, &theiraddr) == -1) {
+        if (recv_ack(&tear_down_ack, sock, &addr) == -1) {
             fprintf(stderr, "[sender]: couldn't receive tear-down ack\n");
             goto cleanup_and_exit;
         }
+        printf("-------- RECEIVED TEAR-DOWN ACK\n");
         if (tear_down_ack.type == 8) {
             break;
         }

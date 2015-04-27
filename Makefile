@@ -1,6 +1,6 @@
 CC = /usr/bin/cc
 CFLAGS = -c -Wall -Wpedantic -std=c11 -D_POSIX_C_SOURCE=200809L -D_XOPEN_SOURCE -D_POSIX_SOURCE
-LDFLAGS =
+LDFLAGS = -lm
 RM = /bin/rm
 SOURCES = packet.c net.c timer.c
 SEND_SOURCES = $(SOURCES) sender.c
@@ -27,4 +27,4 @@ $(RECV_EXECUTABLE): $(RECV_OBJECTS)
 	$(CC) $(CFLAGS) $< -o $@
 
 clean:
-	$(RM) $(EXECUTABLES) $(SEND_OBJECTS) $(RECV_OBJECTS)
+	$(RM) $(EXECUTABLES) $(SEND_OBJECTS) receiver.o
